@@ -153,9 +153,10 @@ function mobilePageHtml(sessionId) {
 
 const server = http.createServer((req, res) => {
   console.log(`[req] ${req.method} ${req.url}`);
-  let pathname;
+  let pathname, parsedUrl;
   try {
-    pathname = new URL(req.url, `http://localhost`).pathname;
+    parsedUrl = new URL(req.url, `http://localhost`);
+    pathname = parsedUrl.pathname;
   } catch {
     res.writeHead(400);
     res.end('Bad Request');
@@ -188,7 +189,7 @@ const server = http.createServer((req, res) => {
     res.end(JSON.stringify({
       sessionId,
       uploadUrl: `${BASE_URL}/${sessionId}`,
-      pollUrl: `http://localhost:${PORT}/poll/${sessionId}`,
+      pollUrl: `${BASE_URL}/poll/${sessionId}`,
     }));
     return;
   }
@@ -243,7 +244,7 @@ const server = http.createServer((req, res) => {
   if (req.method === 'GET' && /^\/poll\/[a-z0-9]{1,12}$/.test(pathname)) {
     const sessionId = pathname.split('/').pop();
     const session = sessions.get(sessionId);
-    const since = parseInt(url.searchParams.get('since') || '0', 10);
+    const since = parseInt(parsedUrl.searchParams.get('since') || '0', 10);
 
     if (!session || Date.now() > session.expireAt) {
       res.writeHead(410, { 'Content-Type': 'application/json' });
@@ -282,8 +283,9 @@ server.on('error', (err) => console.error('[server error]', err));
 process.on('uncaughtException', (err) => console.error('[uncaughtException]', err));
 process.on('unhandledRejection', (err) => console.error('[unhandledRejection]', err));
 process.on('SIGTERM', () => {
-  console.log('[SIGTERM received] graceful shutdown');
-  process.exit(0);
+  console.log('[SIGTERM received] Railway is stopping this container');
+  server.close(() => process.exit(0));
+  setTimeout(() => process.exit(0), 5000);
 });
 
 server.listen(PORT, '0.0.0.0', () => {

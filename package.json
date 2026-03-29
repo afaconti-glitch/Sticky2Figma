@@ -2,6 +2,7 @@
   "name": "Sticky2Figma",
   "version": "1.0.0",
   "description": "Your Figma Plugin",
+  "type": "module",
   "main": "code.js",
   "scripts": {
     "start": "node relay/server.js",
