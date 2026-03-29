@@ -152,8 +152,15 @@ function mobilePageHtml(sessionId) {
 }
 
 const server = http.createServer((req, res) => {
-  const url = new URL(req.url, `http://localhost`);
-  const pathname = url.pathname;
+  console.log(`[req] ${req.method} ${req.url}`);
+  let pathname;
+  try {
+    pathname = new URL(req.url, `http://localhost`).pathname;
+  } catch {
+    res.writeHead(400);
+    res.end('Bad Request');
+    return;
+  }
 
   // CORS headers — required for plugin iframe (http://localhost) to call this server
   res.setHeader('Access-Control-Allow-Origin', '*');
@@ -270,6 +277,10 @@ setInterval(() => {
   for (const [id, s] of sessions)
     if (now > s.expireAt) sessions.delete(id);
 }, 60_000);
+
+server.on('error', (err) => console.error('[server error]', err));
+process.on('uncaughtException', (err) => console.error('[uncaughtException]', err));
+process.on('unhandledRejection', (err) => console.error('[unhandledRejection]', err));
 
 server.listen(PORT, () => {
   console.log(`\nSticky2Figma relay v2 running (polling mode)`);
