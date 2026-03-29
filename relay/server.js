@@ -282,8 +282,8 @@ server.on('error', (err) => console.error('[server error]', err));
 process.on('uncaughtException', (err) => console.error('[uncaughtException]', err));
 process.on('unhandledRejection', (err) => console.error('[unhandledRejection]', err));
 process.on('SIGTERM', () => {
-  console.log('[SIGTERM received] Railway is stopping this container');
-  process.exit(1); // exit code 1 triggers "On Failure" restart
+  console.log('[SIGTERM received] graceful shutdown');
+  process.exit(0);
 });
 
 server.listen(PORT, '0.0.0.0', () => {
