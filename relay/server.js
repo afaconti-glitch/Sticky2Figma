@@ -286,7 +286,7 @@ process.on('SIGTERM', () => {
   process.exit(1); // exit code 1 triggers "On Failure" restart
 });
 
-server.listen(PORT, () => {
+server.listen(PORT, '0.0.0.0', () => {
   console.log(`\nSticky2Figma relay v2 running (polling mode)`);
   console.log(`Sessions expire after 15 minutes\n`);
   console.log('1. In the plugin Settings, set Relay Server URL to:');
