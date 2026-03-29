@@ -4,6 +4,7 @@
   "description": "Your Figma Plugin",
   "main": "code.js",
   "scripts": {
+    "start": "node relay/server.js",
     "build": "node esbuild.config.mjs",
     "watch": "node esbuild.config.mjs --watch",
     "lint": "eslint .",
