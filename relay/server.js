@@ -166,6 +166,13 @@ const server = http.createServer((req, res) => {
     return;
   }
 
+  // Health check for Railway
+  if (req.method === 'GET' && pathname === '/') {
+    res.writeHead(200, { 'Content-Type': 'text/plain' });
+    res.end('OK');
+    return;
+  }
+
   // GET /create-session
   if (req.method === 'GET' && pathname === '/create-session') {
     const sessionId = generateId();
