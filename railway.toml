@@ -1,0 +1,4 @@
+[deploy]
+startCommand = "node relay/server.js"
+healthcheckPath = "/"
+healthcheckTimeout = 30
