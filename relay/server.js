@@ -7,7 +7,7 @@ import { fileURLToPath } from 'url';
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const logoDataUrl = (() => {
   try {
-    const buf = fs.readFileSync(path.join(__dirname, '../Sticky2FigmaLogo.png'));
+    const buf = fs.readFileSync(path.join(__dirname, 'Sticky2FigmaLogo.png'));
     return `data:image/png;base64,${buf.toString('base64')}`;
   } catch { return ''; }
 })();
