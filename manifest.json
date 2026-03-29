@@ -1,0 +1,22 @@
+{
+  "name": "Sticky2Figma",
+  "id": "1619835218369503205",
+  "api": "1.0.0",
+  "main": "code.js",
+  "capabilities": [],
+  "enableProposedApi": false,
+  "documentAccess": "dynamic-page",
+  "editorType": [
+    "figjam"
+  ],
+  "ui": "ui.html",
+  "networkAccess": {
+    "allowedDomains": [
+      "https://api.anthropic.com",
+      "https://api.openai.com"
+    ],
+    "devAllowedDomains": [
+      "*"
+    ]
+  }
+}
