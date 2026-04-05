@@ -5,11 +5,12 @@ if (figma.editorType === 'figjam') {
 
   figma.ui.onmessage = async (msg: UIToPluginMessage & { type: string; key?: string; provider?: string; url?: string }) => {
     if (msg.type === 'load-api-key') {
-      const provider = (await figma.clientStorage.getAsync('ai-provider')) || 'anthropic';
+      const provider = (await figma.clientStorage.getAsync('ai-provider')) || 'openrouter';
       const anthropicKey = (await figma.clientStorage.getAsync('anthropic-api-key')) || '';
       const openaiKey = (await figma.clientStorage.getAsync('openai-api-key')) || '';
+      const openrouterKey = (await figma.clientStorage.getAsync('openrouter-api-key')) || '';
       const relayUrl = (await figma.clientStorage.getAsync('relay-url')) || '';
-      figma.ui.postMessage({ type: 'api-key-loaded', provider, anthropicKey, openaiKey, relayUrl });
+      figma.ui.postMessage({ type: 'api-key-loaded', provider, anthropicKey, openaiKey, openrouterKey, relayUrl });
     }
 
     if (msg.type === 'save-api-key') {
@@ -17,8 +18,10 @@ if (figma.editorType === 'figjam') {
       await figma.clientStorage.setAsync('ai-provider', provider);
       if (provider === 'anthropic') {
         await figma.clientStorage.setAsync('anthropic-api-key', msg.key || '');
-      } else {
+      } else if (provider === 'openai') {
         await figma.clientStorage.setAsync('openai-api-key', msg.key || '');
+      } else if (provider === 'openrouter') {
+        await figma.clientStorage.setAsync('openrouter-api-key', msg.key || '');
       }
     }
 

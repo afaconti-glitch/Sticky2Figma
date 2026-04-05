@@ -14,10 +14,8 @@
     "allowedDomains": [
       "https://api.anthropic.com",
       "https://api.openai.com",
+      "https://openrouter.ai",
       "https://sticky2figma-production.up.railway.app"
-    ],
-    "devAllowedDomains": [
-      "*"
     ]
   }
 }

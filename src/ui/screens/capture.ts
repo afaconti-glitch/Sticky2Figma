@@ -21,6 +21,13 @@ export function renderCapture(container: HTMLElement, callbacks: CaptureCallback
         <h2 style="margin: 0;">Capture Sticky Notes</h2>
       </div>
 
+      <div class="image-thumbs" id="thumbs"></div>
+      <div class="capture-actions" id="actions" style="display: none;">
+        <button class="btn btn-secondary" id="add-more">Add More</button>
+        <button class="btn btn-secondary" id="clear-all">Clear All</button>
+        <button class="btn btn-primary" id="process">Process (<span id="count">0</span>)</button>
+      </div>
+
       <div class="capture-tabs">
         <button class="capture-tab active" id="tab-upload">Upload Files</button>
         <button class="capture-tab" id="tab-scan">Scan with Phone</button>
@@ -36,13 +43,6 @@ export function renderCapture(container: HTMLElement, callbacks: CaptureCallback
       </div>
 
       <div id="panel-scan" style="display: none;"></div>
-
-      <div class="image-thumbs" id="thumbs"></div>
-      <div class="capture-actions" id="actions" style="display: none;">
-        <button class="btn btn-secondary" id="add-more">Add More</button>
-        <button class="btn btn-secondary" id="clear-all">Clear All</button>
-        <button class="btn btn-primary" id="process">Process (<span id="count">0</span>)</button>
-      </div>
     </div>
   `;
 

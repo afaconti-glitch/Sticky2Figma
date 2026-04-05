@@ -27,6 +27,10 @@ const BASE_URL = process.env.RELAY_BASE_URL ?? `http://${getLocalIp()}:${PORT}`;
 // sessionId -> { images: string[], expireAt: number }
 const sessions = new Map();
 
+// OAuth PKCE sessions: state -> { authCode: string|null, expireAt: number }
+const oauthSessions = new Map();
+const OAUTH_TTL = 10 * 60 * 1000; // 10 minutes
+
 function generateId() {
   const chars = '0123456789abcdefghijklmnopqrstuvwxyz';
   let id = '';
@@ -259,6 +263,92 @@ const server = http.createServer((req, res) => {
     return;
   }
 
+  // POST /oauth/start — create an OAuth PKCE session
+  if (req.method === 'POST' && pathname === '/oauth/start') {
+    let body = '';
+    req.on('data', chunk => { body += chunk; });
+    req.on('end', () => {
+      try {
+        const { code_challenge } = JSON.parse(body);
+        if (!code_challenge) {
+          res.writeHead(400, { 'Content-Type': 'application/json' });
+          res.end(JSON.stringify({ error: 'code_challenge required' }));
+          return;
+        }
+        const state = generateId() + generateId(); // 12-char state token
+        oauthSessions.set(state, { authCode: null, expireAt: Date.now() + OAUTH_TTL });
+        const callbackUrl = `${BASE_URL}/oauth/callback`;
+        const authUrl = `https://openrouter.ai/auth?callback_url=${encodeURIComponent(callbackUrl)}&code_challenge=${encodeURIComponent(code_challenge)}&code_challenge_method=S256&state=${state}`;
+        console.log(`[oauth] started session state=${state}`);
+        res.writeHead(200, { 'Content-Type': 'application/json' });
+        res.end(JSON.stringify({ state, authUrl }));
+      } catch {
+        res.writeHead(400, { 'Content-Type': 'application/json' });
+        res.end(JSON.stringify({ error: 'Invalid JSON' }));
+      }
+    });
+    return;
+  }
+
+  // GET /oauth/callback — OpenRouter redirects here after user auth
+  if (req.method === 'GET' && pathname === '/oauth/callback') {
+    const code = parsedUrl.searchParams.get('code');
+    const state = parsedUrl.searchParams.get('state');
+    const session = state ? oauthSessions.get(state) : null;
+
+    if (!session || Date.now() > session.expireAt) {
+      res.writeHead(400, { 'Content-Type': 'text/html' });
+      res.end('<h1>Session expired or invalid</h1><p>Please return to the Figma plugin and try again.</p>');
+      return;
+    }
+
+    session.authCode = code;
+    console.log(`[oauth] callback received for state=${state}`);
+    res.writeHead(200, { 'Content-Type': 'text/html' });
+    res.end(`<!DOCTYPE html>
+<html><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Sticky2Figma — Authenticated</title>
+<style>
+  body { font-family: -apple-system, sans-serif; display: flex; align-items: center;
+         justify-content: center; min-height: 100vh; background: #f5f5f5; margin: 0; }
+  .card { background: #fff; border-radius: 16px; padding: 32px 24px; max-width: 360px;
+          text-align: center; box-shadow: 0 2px 16px rgba(0,0,0,0.1); }
+  .check { font-size: 48px; margin-bottom: 12px; }
+  h1 { font-size: 20px; margin-bottom: 8px; }
+  p { color: #666; font-size: 14px; }
+</style></head><body>
+<div class="card">
+  <div class="check">&#10003;</div>
+  <h1>Authenticated!</h1>
+  <p>You can close this tab and return to the Figma plugin.</p>
+</div></body></html>`);
+    return;
+  }
+
+  // GET /oauth/poll/:state — plugin polls for the auth code
+  if (req.method === 'GET' && /^\/oauth\/poll\/[a-z0-9]{1,24}$/.test(pathname)) {
+    const state = pathname.split('/').pop();
+    const session = oauthSessions.get(state);
+
+    if (!session || Date.now() > session.expireAt) {
+      oauthSessions.delete(state);
+      res.writeHead(410, { 'Content-Type': 'application/json' });
+      res.end(JSON.stringify({ error: 'Session expired' }));
+      return;
+    }
+
+    if (session.authCode) {
+      const code = session.authCode;
+      oauthSessions.delete(state); // one-time use
+      res.writeHead(200, { 'Content-Type': 'application/json' });
+      res.end(JSON.stringify({ ready: true, code }));
+    } else {
+      res.writeHead(200, { 'Content-Type': 'application/json' });
+      res.end(JSON.stringify({ ready: false }));
+    }
+    return;
+  }
+
   // DELETE /session/:sessionId — plugin cleanup on unmount
   if (req.method === 'DELETE' && /^\/session\/[a-z0-9]{1,12}$/.test(pathname)) {
     const sessionId = pathname.split('/').pop();
@@ -277,6 +367,8 @@ setInterval(() => {
   const now = Date.now();
   for (const [id, s] of sessions)
     if (now > s.expireAt) sessions.delete(id);
+  for (const [id, s] of oauthSessions)
+    if (now > s.expireAt) oauthSessions.delete(id);
 }, 60_000);
 
 server.on('error', (err) => console.error('[server error]', err));

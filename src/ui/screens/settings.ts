@@ -1,14 +1,16 @@
-export type AIProvider = 'anthropic' | 'openai';
+import { startOpenRouterAuth } from '../auth/openrouter';
+
+export type AIProvider = 'anthropic' | 'openai' | 'openrouter';
 
 export interface SettingsCallbacks {
-  onSave: (provider: AIProvider, apiKey: string, relayUrl: string) => void;
+  onSave: (provider: AIProvider, apiKey: string) => void;
   onBack: () => void;
   currentProvider: AIProvider;
   currentKey: string;
-  currentRelayUrl: string;
+  relayUrl: string;
 }
 
-const PROVIDER_INFO: Record<AIProvider, { label: string; placeholder: string; url: string; urlLabel: string }> = {
+const PROVIDER_INFO: Record<string, { label: string; placeholder: string; url: string; urlLabel: string }> = {
   anthropic: {
     label: 'Anthropic API Key',
     placeholder: 'sk-ant-...',
@@ -28,8 +30,6 @@ export function renderSettings(container: HTMLElement, callbacks: SettingsCallba
     ? callbacks.currentKey.substring(0, 10) + '...' + callbacks.currentKey.slice(-4)
     : '';
 
-  const info = PROVIDER_INFO[callbacks.currentProvider];
-
   container.innerHTML = `
     <div style="display: flex; flex-direction: column; gap: 16px; flex: 1;">
       <div style="display: flex; align-items: center; gap: 8px;">
@@ -39,61 +39,127 @@ export function renderSettings(container: HTMLElement, callbacks: SettingsCallba
       <div>
         <label style="font-weight: 600; display: block; margin-bottom: 6px;">AI Provider</label>
         <div style="display: flex; gap: 8px;">
+          <button class="btn provider-btn ${callbacks.currentProvider === 'openrouter' ? 'btn-primary' : 'btn-secondary'}" id="provider-openrouter" style="flex: 1; font-size: 12px;">OpenRouter</button>
           <button class="btn provider-btn ${callbacks.currentProvider === 'anthropic' ? 'btn-primary' : 'btn-secondary'}" id="provider-anthropic" style="flex: 1; font-size: 12px;">Anthropic</button>
           <button class="btn provider-btn ${callbacks.currentProvider === 'openai' ? 'btn-primary' : 'btn-secondary'}" id="provider-openai" style="flex: 1; font-size: 12px;">OpenAI</button>
         </div>
       </div>
-      <div>
-        <label style="font-weight: 600; display: block; margin-bottom: 6px;" id="key-label">${info.label}</label>
-        <p style="font-size: 11px;" id="key-help">Get a key at
-          <a href="${info.url}" target="_blank" style="color: #18A0FB;" id="key-link">${info.urlLabel}</a></p>
-        <input type="password" id="api-key-input" placeholder="${info.placeholder}" value="${callbacks.currentKey}"
-          style="width: 100%; padding: 8px 10px; border: 1px solid #ddd; border-radius: 6px; font-size: 12px; font-family: monospace;">
-        ${masked ? `<p style="font-size: 11px; color: #999; margin-top: 4px;" id="masked-key">Current: ${masked}</p>` : ''}
-      </div>
-      <div>
-        <label style="font-weight: 600; display: block; margin-bottom: 6px;">Relay Server URL</label>
-        <p style="font-size: 11px; color: #666; margin-bottom: 6px;">For "Scan with Phone". Run <code style="background:#f0f0f0; padding:1px 4px; border-radius:3px;">npm run relay</code> then paste the URL shown.</p>
-        <input type="text" id="relay-url-input" placeholder="http://192.168.1.X:3000"
-          value="${callbacks.currentRelayUrl}"
-          style="width: 100%; padding: 8px 10px; border: 1px solid #ddd; border-radius: 6px; font-size: 12px;">
-      </div>
-      <button class="btn btn-primary btn-full" id="save-btn">Save</button>
+      <div id="auth-section"></div>
     </div>
   `;
 
   let selectedProvider: AIProvider = callbacks.currentProvider;
+  let authCancel: (() => void) | null = null;
 
-  function updateProviderUI(provider: AIProvider) {
-    selectedProvider = provider;
-    const pInfo = PROVIDER_INFO[provider];
-    const antBtn = container.querySelector('#provider-anthropic')!;
-    const oaiBtn = container.querySelector('#provider-openai')!;
-    antBtn.className = `btn provider-btn ${provider === 'anthropic' ? 'btn-primary' : 'btn-secondary'}`;
-    oaiBtn.className = `btn provider-btn ${provider === 'openai' ? 'btn-primary' : 'btn-secondary'}`;
-    (container.querySelector('#key-label') as HTMLElement).textContent = pInfo.label;
-    const helpEl = container.querySelector('#key-help') as HTMLElement;
-    helpEl.innerHTML = `Get a key at <a href="${pInfo.url}" target="_blank" style="color: #18A0FB;">${pInfo.urlLabel}</a>`;
-    const input = container.querySelector('#api-key-input') as HTMLInputElement;
-    input.placeholder = pInfo.placeholder;
-    input.value = '';
-    const maskedEl = container.querySelector('#masked-key');
-    if (maskedEl) maskedEl.remove();
+  function renderAuthSection() {
+    const section = container.querySelector('#auth-section') as HTMLElement;
+
+    if (selectedProvider === 'openrouter') {
+      const isConnected = callbacks.currentProvider === 'openrouter' && callbacks.currentKey;
+      section.innerHTML = isConnected
+        ? `
+          <div style="text-align: center; padding: 16px 0;">
+            <div style="color: #22c55e; font-size: 24px; margin-bottom: 8px;">&#10003;</div>
+            <p style="font-weight: 600; margin-bottom: 4px;">Connected to OpenRouter</p>
+            <p style="font-size: 11px; color: #999; margin-bottom: 16px;">Logged in via OAuth</p>
+            <button class="btn btn-secondary btn-full" id="reauth-btn" style="margin-bottom: 8px;">Re-authenticate</button>
+            <button class="btn btn-primary btn-full" id="continue-btn">Continue</button>
+          </div>`
+        : `
+          <div style="text-align: center; padding: 16px 0;">
+            <p style="font-size: 13px; color: #666; margin-bottom: 16px;">Log in with your OpenRouter account to use AI models (Claude, GPT-4, and more).</p>
+            <button class="btn btn-primary btn-full" id="login-btn">Login with OpenRouter</button>
+            <div id="oauth-status" style="margin-top: 12px; font-size: 12px;"></div>
+          </div>`;
+
+      if (isConnected) {
+        section.querySelector('#reauth-btn')!.addEventListener('click', startOAuth);
+        section.querySelector('#continue-btn')!.addEventListener('click', () => {
+          callbacks.onSave('openrouter', callbacks.currentKey);
+        });
+      } else {
+        section.querySelector('#login-btn')!.addEventListener('click', startOAuth);
+      }
+    } else {
+      const info = PROVIDER_INFO[selectedProvider];
+      const currentKeyForProvider = callbacks.currentProvider === selectedProvider ? callbacks.currentKey : '';
+      const maskedKey = currentKeyForProvider
+        ? currentKeyForProvider.substring(0, 10) + '...' + currentKeyForProvider.slice(-4)
+        : '';
+
+      section.innerHTML = `
+        <div>
+          <label style="font-weight: 600; display: block; margin-bottom: 6px;">${info.label}</label>
+          <p style="font-size: 11px;">Get a key at
+            <a href="${info.url}" target="_blank" style="color: #18A0FB;">${info.urlLabel}</a></p>
+          <input type="password" id="api-key-input" placeholder="${info.placeholder}" value="${currentKeyForProvider}"
+            style="width: 100%; padding: 8px 10px; border: 1px solid #ddd; border-radius: 6px; font-size: 12px; font-family: monospace;">
+          ${maskedKey ? `<p style="font-size: 11px; color: #999; margin-top: 4px;">Current: ${maskedKey}</p>` : ''}
+        </div>
+        <button class="btn btn-primary btn-full" id="save-btn" style="margin-top: 12px;">Save</button>`;
+
+      section.querySelector('#save-btn')!.addEventListener('click', () => {
+        const keyInput = section.querySelector('#api-key-input') as HTMLInputElement;
+        const key = keyInput.value.trim();
+        if (!key) {
+          alert('Please enter an API key');
+          return;
+        }
+        callbacks.onSave(selectedProvider, key);
+      });
+    }
   }
 
-  container.querySelector('#provider-anthropic')!.addEventListener('click', () => updateProviderUI('anthropic'));
-  container.querySelector('#provider-openai')!.addEventListener('click', () => updateProviderUI('openai'));
+  async function startOAuth() {
+    const statusEl = container.querySelector('#oauth-status') || (() => {
+      const el = document.createElement('div');
+      el.id = 'oauth-status';
+      el.style.cssText = 'margin-top: 12px; font-size: 12px;';
+      container.querySelector('#auth-section')!.appendChild(el);
+      return el;
+    })();
 
-  container.querySelector('#back-btn')!.addEventListener('click', callbacks.onBack);
-  container.querySelector('#save-btn')!.addEventListener('click', () => {
-    const keyInput = container.querySelector('#api-key-input') as HTMLInputElement;
-    const key = keyInput.value.trim();
-    if (!key) {
-      alert('Please enter an API key');
-      return;
+    try {
+      (statusEl as HTMLElement).innerHTML = '<span style="color: #f0a500;">Starting authentication...</span>';
+
+      const auth = await startOpenRouterAuth(callbacks.relayUrl);
+      authCancel = auth.cancel;
+
+      // Open auth URL in browser
+      window.open(auth.authUrl, '_blank');
+
+      (statusEl as HTMLElement).innerHTML = '<span style="color: #f0a500;">Waiting for authentication... (check your browser)</span>';
+
+      const key = await auth.pollForKey();
+      authCancel = null;
+
+      // Save and continue
+      callbacks.onSave('openrouter', key);
+    } catch (err) {
+      authCancel = null;
+      (statusEl as HTMLElement).innerHTML = `<span style="color: #f24822;">${err instanceof Error ? err.message : 'Authentication failed'}</span>`;
     }
-    const relayInput = container.querySelector('#relay-url-input') as HTMLInputElement;
-    const relayUrl = relayInput.value.trim();
-    callbacks.onSave(selectedProvider, key, relayUrl);
+  }
+
+  function selectProvider(provider: AIProvider) {
+    if (authCancel) { authCancel(); authCancel = null; }
+    selectedProvider = provider;
+    container.querySelector('#provider-openrouter')!.className =
+      `btn provider-btn ${provider === 'openrouter' ? 'btn-primary' : 'btn-secondary'}`;
+    container.querySelector('#provider-anthropic')!.className =
+      `btn provider-btn ${provider === 'anthropic' ? 'btn-primary' : 'btn-secondary'}`;
+    container.querySelector('#provider-openai')!.className =
+      `btn provider-btn ${provider === 'openai' ? 'btn-primary' : 'btn-secondary'}`;
+    renderAuthSection();
+  }
+
+  container.querySelector('#provider-openrouter')!.addEventListener('click', () => selectProvider('openrouter'));
+  container.querySelector('#provider-anthropic')!.addEventListener('click', () => selectProvider('anthropic'));
+  container.querySelector('#provider-openai')!.addEventListener('click', () => selectProvider('openai'));
+  container.querySelector('#back-btn')!.addEventListener('click', () => {
+    if (authCancel) { authCancel(); authCancel = null; }
+    callbacks.onBack();
   });
+
+  renderAuthSection();
 }

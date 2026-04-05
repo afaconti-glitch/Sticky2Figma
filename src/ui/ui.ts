@@ -12,14 +12,17 @@ const app = document.getElementById('app')!;
 let currentScreen: Screen = 'welcome';
 let capturedImageDataUrls: string[] = [];
 let detectedStickies: DetectedSticky[] = [];
-let aiProvider: AIProvider = 'anthropic';
+let aiProvider: AIProvider = 'openrouter';
 let anthropicKey: string = '';
 let openaiKey: string = '';
-let relayUrl: string = '';
+let openrouterKey: string = '';
+const relayUrl = 'https://sticky2figma-production.up.railway.app';
 let scanSession: ScanSession | null = null;
 
 function getActiveKey(): string {
-  return aiProvider === 'openai' ? openaiKey : anthropicKey;
+  if (aiProvider === 'openrouter') return openrouterKey;
+  if (aiProvider === 'openai') return openaiKey;
+  return anthropicKey;
 }
 
 function navigate(screen: Screen, data?: unknown) {
@@ -44,20 +47,20 @@ function navigate(screen: Screen, data?: unknown) {
       renderSettings(app, {
         currentProvider: aiProvider,
         currentKey: getActiveKey(),
-        currentRelayUrl: relayUrl,
-        onSave: (provider: AIProvider, key: string, newRelayUrl: string) => {
+        onSave: (provider: AIProvider, key: string) => {
           aiProvider = provider;
           if (provider === 'anthropic') {
             anthropicKey = key;
-          } else {
+          } else if (provider === 'openai') {
             openaiKey = key;
+          } else if (provider === 'openrouter') {
+            openrouterKey = key;
           }
-          relayUrl = newRelayUrl;
           parent.postMessage({ pluginMessage: { type: 'save-api-key', provider, key } }, '*');
-          parent.postMessage({ pluginMessage: { type: 'save-relay-url', url: newRelayUrl } }, '*');
           navigate('capture');
         },
         onBack: () => navigate('welcome'),
+        relayUrl,
       });
       break;
 
@@ -161,12 +164,12 @@ window.onmessage = (event) => {
       provider: string;
       anthropicKey: string;
       openaiKey: string;
-      relayUrl: string;
+      openrouterKey: string;
     };
-    aiProvider = (data.provider as AIProvider) || 'anthropic';
+    aiProvider = (data.provider as AIProvider) || 'openrouter';
     anthropicKey = data.anthropicKey || '';
     openaiKey = data.openaiKey || '';
-    relayUrl = data.relayUrl || '';
+    openrouterKey = data.openrouterKey || '';
     navigate('welcome');
   }
 };

@@ -147,6 +147,52 @@ async function callOpenAIVision(base64Image: string, apiKey: string): Promise<St
 }
 
 /**
+ * Call OpenRouter Vision API (OpenAI-compatible format).
+ */
+async function callOpenRouterVision(base64Image: string, apiKey: string): Promise<StickyResult> {
+  const response = await fetch('https://openrouter.ai/api/v1/chat/completions', {
+    method: 'POST',
+    headers: {
+      'Content-Type': 'application/json',
+      'Authorization': `Bearer ${apiKey}`,
+      'X-Title': 'Sticky2Figma',
+    },
+    body: JSON.stringify({
+      model: 'anthropic/claude-sonnet-4-20250514',
+      max_tokens: 1024,
+      messages: [
+        {
+          role: 'user',
+          content: [
+            {
+              type: 'image_url',
+              image_url: {
+                url: `data:image/jpeg;base64,${base64Image}`,
+              },
+            },
+            { type: 'text', text: buildPrompt() },
+          ],
+        },
+      ],
+    }),
+  });
+
+  if (!response.ok) {
+    const err = await response.text();
+    if (response.status === 401) {
+      throw new Error('Invalid API key. Please re-authenticate with OpenRouter in settings.');
+    }
+    throw new Error(`OpenRouter API error (${response.status}): ${err}`);
+  }
+
+  const result = await response.json();
+  const content = result.choices?.[0]?.message?.content;
+  if (!content) throw new Error('Empty response from OpenRouter API');
+
+  return parseJsonResponse(content);
+}
+
+/**
  * Parse JSON from an LLM response, handling markdown code blocks.
  */
 function parseJsonResponse(text: string): StickyResult {
@@ -170,8 +216,9 @@ export async function processImage(
   const base64 = await imageToBase64(imageDataUrl);
 
   onStatus('Analyzing sticky notes with AI...');
-  const result = provider === 'openai'
-    ? await callOpenAIVision(base64, apiKey)
+  const result =
+    provider === 'openai' ? await callOpenAIVision(base64, apiKey)
+    : provider === 'openrouter' ? await callOpenRouterVision(base64, apiKey)
     : await callAnthropicVision(base64, apiKey);
 
   if (!result.stickies || result.stickies.length === 0) {
